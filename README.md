@@ -40,3 +40,6 @@ You will need an user token inorder to use this code. You can obtain it by doing
 6. Save the file
 7. Open command prompt where both the files are present and run `pip install -r requirements.txt`
 8. Once the packages are downloaded, either double-click the python file in order to run it or open command prompt where the python file is present and run `python main.py`
+
+9. ### Deploy Discord-Onliner to Render
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
