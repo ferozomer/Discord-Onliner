@@ -1,95 +1,99 @@
+import os
 import sys
 import json
 import time
 import requests
 import websocket
+from keep_alive import keep_alive
 
-class DiscordStatusUpdater:
-    def __init__(self, token: str, status: str, custom_status: str):
-        self.token = token
-        self.status = status
-        self.custom_status = custom_status
-        self.headers = {"Authorization": token, "Content-Type": "application/json"}
-        self.validate_token()
-        self.user_info = self.get_user_info()
+# Configurable variables
+status = "online"  # online/dnd/idle
+custom_status = "Hey 👋"  # Put for custom status
+usertoken = "" # Discord Authorization Token
 
-    def validate_token(self):
-        response = requests.get('https://discordapp.com/api/v9/users/@me', headers=self.headers)
-        if response.status_code != 200:
-            print("[ERROR] Your token might be invalid. Please check it again.")
-            sys.exit()
+authorization = "Authorization"
+content_type = "Content-Type"
+application_json = "application/json"
+windows_os = "Windows 11"
+chrome_browser = "Google Chrome"
+windows_device = "Windows"
 
-    def get_user_info(self):
-        return requests.get('https://discordapp.com/api/v9/users/@me', headers=self.headers).json()
+authorization_address = "https://discord.com/api/v9/users/@me"
+websocket_address = "wss://gateway.discord.gg/?v=9&encoding=json"
 
-    def connect_websocket(self):
+def validate_token(usertoken):
+    headers = {authorization: usertoken, content_type: application_json}
+    try:
+        response = requests.get(authorization_address, headers=headers)
+        return response.status_code == 200
+    except requests.RequestException as e:
+        print(f"Error validating token: {e}")
+        return False
+
+def get_user_data(headers):
+    try:
+        return requests.get(authorization_address, headers=headers).json()
+    except requests.RequestException as e:
+        print(f"Error fetching user data: {e}")
+        return None
+
+def apply_online_status(token, status):
+    try:
         ws = websocket.WebSocket()
-        ws.connect("wss://gateway.discord.gg/?v=9&encoding=json")
+        ws.connect(websocket_address)
         start = json.loads(ws.recv())
-        heartbeat_interval = start["d"]["heartbeat_interval"]
-        self.authenticate(ws)
-        self.update_custom_status(ws)
-        self.maintain_connection(ws, heartbeat_interval)
+        apply_auth(ws, start, token)
+        apply_custom_status(ws, token)
+        online = {"op": 1, "d": "None"}
+        time.sleep(start["d"]["heartbeat_interval"] / 1000)
+        ws.send(json.dumps(online))
+    except websocket.WebSocketException as e:
+        print(f"WebSocket Error: {e}")
 
-    def authenticate(self, ws):
-        auth_payload = {
-            "op": 2,
-            "d": {
-                "token": self.token,
-                "properties": {
-                    "$os": "Windows 10",
-                    "$browser": "Google Chrome",
-                    "$device": "Windows",
-                },
-                "presence": {"status": self.status, "afk": False},
+def apply_auth(ws, start, token):
+    auth = {
+        "op": 2,
+        "d": {
+            "token": token,
+            "properties": {
+                "$os": windows_os,
+                "$browser": chrome_browser,
+                "$device": windows_device,
             },
-            "s": None,
-            "t": None,
-        }
-        ws.send(json.dumps(auth_payload))
+            "presence": {"status": status, "afk": False},
+        },
+        "s": None,
+        "t": None,
+    }
+    ws.send(json.dumps(auth))
 
-    def update_custom_status(self, ws):
-        custom_status_payload = {
-            "op": 3,
-            "d": {
-                "since": 0,
-                "activities": [
-                    {
-                        "type": 4,
-                        "state": self.custom_status,
-                        "name": "Custom Status",
-                        "id": "custom",
-                    }
-                ],
-                "status": self.status,
-                "afk": False,
-            },
-        }
-        ws.send(json.dumps(custom_status_payload))
+def apply_custom_status(ws, token):
+    cstatus = {
+        "op": 3,
+        "d": {
+            "since": 0,
+            "activities": [{"type": 4, "state": custom_status, "name": "Custom Status", "id": "custom"}],
+            "status": status,
+            "afk": False,
+        },
+    }
+    ws.send(json.dumps(cstatus))
 
-    def maintain_connection(self, ws, heartbeat_interval):
-        keep_alive_payload = {"op": 1, "d": "None"}
-        try:
-            while True:
-                time.sleep(heartbeat_interval / 1000)
-                ws.send(json.dumps(keep_alive_payload))
-        except KeyboardInterrupt:
-            print("Interrupted by user, closing connection.")
-            ws.close()
+def main():
+    os.system("clear")
+    if not usertoken or not validate_token(usertoken):
+        print("[ERROR] Please add a valid token.")
+        sys.exit()
 
-    def run(self):
-        username = self.user_info["username"]
-        discriminator = self.user_info["discriminator"]
-        user_id = self.user_info["id"]
-        print(f"Logged in as {username}#{discriminator} ({user_id}).")
-        try:
-            self.connect_websocket()
-        except KeyboardInterrupt:
-            print("Disconnected successfully.")
+    headers = {authorization: usertoken, content_type: application_json}
+    userinfo = get_user_data(headers)
+    if userinfo:
+        print(f"Logged in as {userinfo['username']}#{userinfo['discriminator']} ({userinfo['id']}).")
+        while True:
+            apply_online_status(usertoken, status)
+            time.sleep(30)
+    else:
+        print("[ERROR] Failed to retrieve user data.")
 
-# Usage
-usertoken = "" #Put token inside "" 
-status = "online" #Online/idle/dnd
-custom_status = "Playing Grand Theft Auto V"  #for no custom status
-discord_updater = DiscordStatusUpdater(usertoken, status, custom_status)
-discord_updater.run()
+keep_alive()
+main()
